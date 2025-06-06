@@ -1,0 +1,10 @@
+# Configurable cooldown for items in seconds
+cooldowns:
+  ender_pearl: 20
+  golden_apple: 10
+  enchanted_golden_apple: 30
+
+messages:
+  ender_pearl: "&c&l[!]&r &cYou must wait &e{time}s&c before using another Ender Pearl."
+  golden_apple: "&c&l[!]&r &cYou must wait &e{time}s&c before using another Golden Apple."
+  enchanted_golden_apple: "&c&l[!]&r &cYou must wait &e{time}s&c before using another Enchanted Golden Apple."
