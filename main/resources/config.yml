@@ -1,10 +1,12 @@
 # Configurable cooldown for items in seconds
 cooldowns:
-  ender_pearl: 20
-  golden_apple: 10
-  enchanted_golden_apple: 30
+  ENDER_PEARL: 10
+  GOLDEN_APPLE: 10
+  ENCHANTED_GOLDEN_APPLE: 60
+  TOTEM_OF_UNDYING: 180
 
 messages:
-  ender_pearl: "&c&l[!]&r &cYou must wait &e{time}s&c before using another Ender Pearl."
-  golden_apple: "&c&l[!]&r &cYou must wait &e{time}s&c before using another Golden Apple."
-  enchanted_golden_apple: "&c&l[!]&r &cYou must wait &e{time}s&c before using another Enchanted Golden Apple."
+  ender_pearl: "&c&l[!]&r &cYou must wait &e{time}&c before using another Ender Pearl."
+  golden_apple: "&c&l[!]&r &cYou must wait &e{time}&c before using another Golden Apple."
+  enchanted_golden_apple: "&c&l[!]&r &cYou must wait &e{time}&c before using another Enchanted Golden Apple."
+  totem_of_undying: "&c&l[!]&r &cYour totem failed to activate due to being on cooldown."
