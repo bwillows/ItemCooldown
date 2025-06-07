@@ -1,5 +1,9 @@
 package bwillows.itemcooldown;
 
+import bwillows.itemcooldown.listeners.onEntityResurrect;
+import bwillows.itemcooldown.listeners.onPlayerConsumeItem;
+import bwillows.itemcooldown.listeners.onPlayerUseItem;
+import bwillows.itemcooldown.listeners.projectileLaunchEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -7,24 +11,48 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityResurrectEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public class ItemCooldown extends JavaPlugin implements Listener {
 
-    private Map<Player, Long> enderPearlCooldowns = new HashMap<>();
-    private Map<Player, Long> goldenAppleCooldowns = new HashMap<>();
-    private Map<Player, Long> enchantedGoldenAppleCooldowns = new HashMap<>();
+    ItemCooldown plugin;
     public FileConfiguration config;
+
+    public Utils utils;
+
+
+    public enum CooldownType {
+        ENDER_PEARL,
+        GOLDEN_APPLE,
+        ENCHANTED_GOLDEN_APPLE,
+        TOTEM
+    }
+
+    private class Cooldowns {
+        Long enderpearl;
+        Long goldenApple;
+        Long enchantedGoldenApple;
+        Long totem;
+    }
+
+    private Map<UUID, Cooldowns> cooldownsMap = new HashMap<>();
 
     @Override
     public void onEnable() {
+        this.plugin = this;
+        utils = new Utils();
         File pluginFolder = new File(getDataFolder().getParent(), getDescription().getName());
         if (!pluginFolder.exists()) {
             pluginFolder.mkdirs();  // Creates the folder if it doesn't exist
@@ -35,7 +63,14 @@ public class ItemCooldown extends JavaPlugin implements Listener {
 
         config = this.getConfig();
 
+        Bukkit.getPluginManager().registerEvents(new onPlayerConsumeItem(plugin), this);
+        Bukkit.getPluginManager().registerEvents(new onPlayerUseItem(plugin), this);
+        Bukkit.getPluginManager().registerEvents(new projectileLaunchEvent(plugin), this);
         Bukkit.getPluginManager().registerEvents(this, this);
+
+        if(utils.isAtLeastMinecraft_1_11()) {
+            Bukkit.getPluginManager().registerEvents(new onEntityResurrect(plugin), this);
+        }
     }
 
     @Override
@@ -43,114 +78,140 @@ public class ItemCooldown extends JavaPlugin implements Listener {
         // Clean up when plugin is disabled
     }
 
-    @EventHandler
-    public void onPlayerUseItem(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
 
-        // Check if the player has bypass permission
-        if (player.hasPermission("itemcooldown.bypass-cooldown")) {
-            return; // Skip cooldown check if the player has permission
+    public void startCooldown(Player player, CooldownType type, int seconds) {
+        Cooldowns cooldowns = cooldownsMap.computeIfAbsent(player.getUniqueId(), id -> new Cooldowns());
+
+        long expiryTime = System.currentTimeMillis() + (seconds * 1000L);
+
+        // Set the cooldown timestamp
+        switch (type) {
+            case ENDER_PEARL:
+                cooldowns.enderpearl = expiryTime;
+                break;
+            case GOLDEN_APPLE:
+                cooldowns.goldenApple = expiryTime;
+                break;
+            case ENCHANTED_GOLDEN_APPLE:
+                cooldowns.enchantedGoldenApple = expiryTime;
+                break;
+            case TOTEM:
+                cooldowns.totem = expiryTime;
+                break;
         }
 
-        // Check for ender pearl
-        if (event.getItem() != null && event.getItem().getType() == Material.ENDER_PEARL) {
-            long cooldownTime = config.getInt("cooldowns.ender_pearl") * 1000;
-            if (isCooldownActive(player, enderPearlCooldowns, cooldownTime)) {
-                long remainingTime = (cooldownTime - (System.currentTimeMillis() - enderPearlCooldowns.get(player))) / 1000;
-                String message = config.getString("messages.ender_pearl").replace("{time}", String.valueOf(remainingTime));
-                message = ChatColor.translateAlternateColorCodes('&', message);  // Support for color codes
-                event.setCancelled(true);
-                player.sendMessage(message);
-            } else {
-                startCooldown(player, enderPearlCooldowns, cooldownTime);
-            }
-        }
-
-        // Check for golden apple
-        if (event.getItem() != null && event.getItem().getType() == Material.GOLDEN_APPLE) {
-            long cooldownTime = config.getInt("cooldowns.golden_apple") * 1000;
-            if (isCooldownActive(player, goldenAppleCooldowns, cooldownTime)) {
-                long remainingTime = (cooldownTime - (System.currentTimeMillis() - goldenAppleCooldowns.get(player))) / 1000;
-                String message = config.getString("messages.golden_apple").replace("{time}", String.valueOf(remainingTime));
-                message = ChatColor.translateAlternateColorCodes('&', message);  // Support for color codes
-                event.setCancelled(true);
-                player.sendMessage(message);
-            } else {
-                startCooldown(player, goldenAppleCooldowns, cooldownTime);
-            }
-        }
-
-        // Check for enchanted golden apple
-        if (event.getItem() != null && event.getItem().getType() == Material.GOLDEN_APPLE && event.getItem().getDurability() == 1) { // Enchanted Golden Apple
-            long cooldownTime = config.getInt("cooldowns.enchanted_golden_apple") * 1000;
-            if (isCooldownActive(player, enchantedGoldenAppleCooldowns, cooldownTime)) {
-                long remainingTime = (cooldownTime - (System.currentTimeMillis() - enchantedGoldenAppleCooldowns.get(player))) / 1000;
-                String message = config.getString("messages.enchanted_golden_apple").replace("{time}", String.valueOf(remainingTime));
-                message = ChatColor.translateAlternateColorCodes('&', message);  // Support for color codes
-                event.setCancelled(true);
-                player.sendMessage(message);
-            } else {
-                startCooldown(player, enchantedGoldenAppleCooldowns, cooldownTime);
-            }
-        }
-    }
-
-    @EventHandler
-    public void onPlayerConsumeItem(PlayerItemConsumeEvent event) {
-        Player player = event.getPlayer();
-
-        // Check if the player has bypass permission
-        if (player.hasPermission("itemcooldown.bypass-cooldown")) {
-            return; // Skip cooldown check if the player has permission
-        }
-
-        // Handle cooldown for golden apple when consumed
-        if (event.getItem().getType() == Material.GOLDEN_APPLE && event.getItem().getDurability() == 0) {
-            long cooldownTime = config.getInt("cooldowns.golden_apple") * 1000;
-            if (isCooldownActive(player, goldenAppleCooldowns, cooldownTime)) {
-                long remainingTime = (cooldownTime - (System.currentTimeMillis() - goldenAppleCooldowns.get(player))) / 1000;
-                String message = config.getString("messages.golden_apple").replace("{time}", String.valueOf(remainingTime));
-                message = ChatColor.translateAlternateColorCodes('&', message);  // Support for color codes
-                event.setCancelled(true);
-                player.sendMessage(message);
-            } else {
-                startCooldown(player, goldenAppleCooldowns, cooldownTime);
-            }
-        }
-
-        // Handle cooldown for enchanted golden apple when consumed
-        if (event.getItem().getType() == Material.GOLDEN_APPLE && event.getItem().getDurability() == 1) { // Enchanted Golden Apple
-            long cooldownTime = config.getInt("cooldowns.enchanted_golden_apple") * 1000;
-            if (isCooldownActive(player, enchantedGoldenAppleCooldowns, cooldownTime)) {
-                long remainingTime = (cooldownTime - (System.currentTimeMillis() - enchantedGoldenAppleCooldowns.get(player))) / 1000;
-                String message = config.getString("messages.enchanted_golden_apple").replace("{time}", String.valueOf(remainingTime));
-                message = ChatColor.translateAlternateColorCodes('&', message);  // Support for color codes
-                event.setCancelled(true);
-                player.sendMessage(message);
-            } else {
-                startCooldown(player, enchantedGoldenAppleCooldowns, cooldownTime);
-            }
-        }
-    }
-
-    private boolean isCooldownActive(Player player, Map<Player, Long> cooldownMap, long cooldownTime) {
-        if (cooldownMap.containsKey(player)) {
-            long lastUsed = cooldownMap.get(player);
-            if (System.currentTimeMillis() - lastUsed < cooldownTime) {
-                return true; // Cooldown is still active
-            }
-        }
-        return false; // No cooldown or cooldown has expired
-    }
-
-    private void startCooldown(Player player, Map<Player, Long> cooldownMap, long cooldownTime) {
-        cooldownMap.put(player, System.currentTimeMillis());
-        // Start a delayed task to clear the cooldown after the duration
+        // Schedule task to clear the cooldown after the time passes
         new BukkitRunnable() {
             @Override
             public void run() {
-                cooldownMap.remove(player);
+                Cooldowns cd = cooldownsMap.get(player.getUniqueId());
+                if (cd == null) return;
+
+                switch (type) {
+                    case ENDER_PEARL:
+                        if (cd.enderpearl != null && System.currentTimeMillis() >= cd.enderpearl) {
+                            cd.enderpearl = null;
+                        }
+                        break;
+                    case GOLDEN_APPLE:
+                        if (cd.goldenApple != null && System.currentTimeMillis() >= cd.goldenApple) {
+                            cd.goldenApple = null;
+                        }
+                        break;
+                    case ENCHANTED_GOLDEN_APPLE:
+                        if (cd.enchantedGoldenApple != null && System.currentTimeMillis() >= cd.enchantedGoldenApple) {
+                            cd.enchantedGoldenApple = null;
+                        }
+                        break;
+                    case TOTEM:
+                        if (cd.totem != null && System.currentTimeMillis() >= cd.totem) {
+                            cd.totem = null;
+                        }
+                        break;
+                }
             }
-        }.runTaskLater(this, cooldownTime / 50); // Convert milliseconds to ticks
+        }.runTaskLater(plugin, seconds * 20L); // 20 ticks = 1 second
+    }
+
+    public boolean isOnCooldown(Player player, CooldownType type) {
+        Cooldowns cd = cooldownsMap.get(player.getUniqueId());
+        if (cd == null) return false;
+
+        long now = System.currentTimeMillis();
+
+        switch (type) {
+            case ENDER_PEARL:
+                return cd.enderpearl != null && now < cd.enderpearl;
+            case GOLDEN_APPLE:
+                return cd.goldenApple != null && now < cd.goldenApple;
+            case ENCHANTED_GOLDEN_APPLE:
+                return cd.enchantedGoldenApple != null && now < cd.enchantedGoldenApple;
+            case TOTEM:
+                return cd.totem != null && now < cd.totem;
+            default:
+                return false;
+        }
+    }
+
+    public int getRemainingCooldown(Player player, CooldownType type) {
+        Cooldowns cd = cooldownsMap.get(player.getUniqueId());
+        if (cd == null) return 0;
+
+        long now = System.currentTimeMillis();
+        long expiresAt = 0;
+
+        switch (type) {
+            case ENDER_PEARL: expiresAt = cd.enderpearl != null ? cd.enderpearl : 0; break;
+            case GOLDEN_APPLE: expiresAt = cd.goldenApple != null ? cd.goldenApple : 0; break;
+            case ENCHANTED_GOLDEN_APPLE: expiresAt = cd.enchantedGoldenApple != null ? cd.enchantedGoldenApple : 0; break;
+            case TOTEM: expiresAt = cd.totem != null ? cd.totem : 0; break;
+        }
+
+        return (int) Math.max(0, (expiresAt - now) / 1000);
+    }
+
+    private final Map<UUID, BukkitTask> totemCooldownTasks = new HashMap<>();
+
+    public void startTotemCooldown(Player player, int seconds) {
+        UUID uuid = player.getUniqueId();
+
+        // Set cooldown
+        cooldownsMap.computeIfAbsent(uuid, id -> new Cooldowns()).totem = System.currentTimeMillis() + (seconds * 1000L);
+
+        // Cancel existing task if any
+        if (totemCooldownTasks.containsKey(uuid)) {
+            totemCooldownTasks.get(uuid).cancel();
+        }
+
+        // Schedule a new task
+        BukkitTask task = new BukkitRunnable() {
+            @Override
+            public void run() {
+                Cooldowns cd = cooldownsMap.get(uuid);
+                if (cd != null) cd.totem = null;
+            }
+        }.runTaskLater(plugin, seconds * 20L);
+
+        totemCooldownTasks.put(uuid, task);
+    }
+
+    public void resetTotemCooldown(Player player) {
+        UUID uuid = player.getUniqueId();
+
+        // Clear timestamp
+        Cooldowns cd = cooldownsMap.get(uuid);
+        if (cd != null) cd.totem = null;
+
+        // Cancel task
+        if (totemCooldownTasks.containsKey(uuid)) {
+            totemCooldownTasks.get(uuid).cancel();
+            totemCooldownTasks.remove(uuid);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        resetTotemCooldown(player);
     }
 }
