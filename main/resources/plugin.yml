@@ -1,6 +1,7 @@
 name: ItemCooldown
 version: '${project.version}'
 main: bwillows.itemcooldown.ItemCooldown
+api-version: 1.20
 permissions:
   itemcooldown.bypass-cooldown:
     description: Allows the player to bypass cooldowns.
